@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: pg_transport
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: transport_user
+      POSTGRES_PASSWORD: transport_pass
+      POSTGRES_DB: transport_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./storage:/docker-entrypoint-initdb.d/:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      
+  spark-submit:
+    build:
+      context: .
+      dockerfile: ./spark/Dockerfile
+    container_name: spark_pipeline
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data/processed:/data:ro
+      - ./spark/analytics_spark.py:/app/analytics_spark.py
+    environment:
+      SPARK_DRIVER_MEMORY: 2g 
+      SPARK_EXECUTOR_MEMORY: 2g
+    command:
+      - /opt/spark/bin/spark-submit
+      - --master
+      - local[*]
+      - /app/analytics_spark.py
+    restart: "no"
+
+volumes:
+  pgdata:
